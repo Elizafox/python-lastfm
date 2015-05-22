@@ -2,4 +2,4 @@
 
 A Python last.fm library.
 
-This library requires (aiohttp)[http://github.com/KeepSafe/aiohttp].
+This library requires [aiohttp](http://github.com/KeepSafe/aiohttp).
