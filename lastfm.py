@@ -26,7 +26,9 @@ class Track:
                                             artist=self.artist)
 
     def format(self, fmt, **props):
-        props.update({name: getattr(self, name) for name in self.__slots__ if getattr(self, name, None) is not None})
+        d = {name: getattr(self, name) for name in self.__slots__
+             if getattr(self, name, None) is not None}
+        props.update(d)
         return fmt.format(**props)
 
     @classmethod
@@ -126,6 +128,7 @@ class LastFM:
         """Get the track(s) being listened to by a user.
 
         :param user: User to get listening data for
+
         :param limit: Limit the number of tracks, None for as many as the
             server gives us.
         """
@@ -139,6 +142,8 @@ class LastFM:
             keys["limit"] = limit
 
         data = yield from self.call_api("user.getRecentTracks", **keys)
+
+        # TODO - XML parsing
         data = data["recenttracks"]["track"]
         if not isinstance(data, list):
             data = [data]
@@ -148,8 +153,10 @@ class LastFM:
     def get_track_info(self, track, user=None):
         """Get the information on a track, returning user data optionally.
 
-        :param track: Get info about this track, either an mbid or an
-            (artist, title) tuple
+        :param track: Get info about this track, either an mbid, an
+            (artist, title) tuple, or a
+            :py:class:`~python-lastfm.lastfm.track` object
+
         :param user: Get user info about a track (play count, etc).
         """
         keys = {}
@@ -157,12 +164,18 @@ class LastFM:
         if user:
             keys["username"] = user
 
-        if not isinstance(track, str):
+        if hasattr(track, "mbid"):
+            if track.mbid is not None:
+                keys["mbid"] = track.mbid
+            else:
+                keys["artist"] = track.artist
+                keys["track"] = track.track
+        elif isinstance(track, str):
+            keys["mbid"] = track
+        else:
             keys["artist"] = track[0]
             keys["track"] = track[1]
-        else:
-            keys["mbid"] = track
 
-        data = yield from self.call_api("user.getRecentTracks", **keys)
+        data = yield from self.call_api("track.getInfo", **keys)
         return data
 
