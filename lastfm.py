@@ -1,10 +1,19 @@
 import asyncio
 import aiohttp
 
+import json
 from urllib.parse import urlencode
+from xml.dom import minidom
 
 from functools import lru_cache
 from warnings import warn
+
+def xml_get_text(tag):
+    parts = []
+    for node in tag.childNodes:
+        if node.nodeType == node.TEXT_NODE:
+            parts.append(node.data)
+    return ''.join(parts)
 
 
 class Track:
@@ -54,12 +63,29 @@ class Track:
         if "@attr" in json:
             kw["playing"] = ("nowplaying" in json["@attr"])
 
+        if "mbid" in json and json["mbid"] != '':
+            kw["mbid"] = json["mbid"]
+
         return cls(artist, title, **kw)
 
     @classmethod
     def from_xml(cls, xml):
-        assert isinstance(xml, xml.dom.Document)
-        # TODO
+        kw = {}
+
+        artist = xml_get_text(xml.getElementsByTagName('artist')[0])
+        title = xml_get_text(xml.getElementsByTagName('name')[0])
+
+        album = xml_get_text(xml.getElementsByTagName('album')[0])
+        if album != "":
+            kw["album"] = album
+
+        mbid = xml_get_text(xml.getElementsByTagName('mbid')[0])
+        if mbid != "":
+            kw["mbid"] = mbid
+
+        kw["playing"] = xml.hasAttribute("nowplaying")
+
+        return cls(artist, title, **kw)
 
 
 class LastFMError(Exception):
@@ -91,14 +117,15 @@ class LastFM:
     def parse_data(self, response):
         """Parse last.fm data.
 
+        :param response: The raw response to parse.
+
         :returns: A tuple containing the data format and the data.
         """
         try:
-            return ("json", json.loads(data))
-        except Exception:
-            # try XML?
+            return ("json", json.loads(response))
+        except ValueError:
             warn("JSON failed, falling back to XML for parsing!")
-            return ("xml", minidom.parseString(data))
+            return ("xml", minidom.parseString(response))
 
     @lru_cache(maxsize=32)
     def build_qs(self, **keys):
@@ -109,9 +136,16 @@ class LastFM:
 
     @asyncio.coroutine
     def call_api(self, method, fmt="json", **keys):
-        """Call the last.fm API directly using the given parameters"""
+        """Call the last.fm API directly using the given parameters.
+
+        :param method: The API method to call (i.e. "track.getInfo").
+        :param fmt: The format desired.  You must specify None for XML.
+
+        :returns: Response as parsed by :py:func:`parse_data`.
+        """
         keys["method"] = method
-        keys["format"] = fmt
+        if fmt is not None:
+            keys["format"] = fmt
         response = yield from aiohttp.request("GET", self.build_qs(**keys))
 
         if response.status != 200:
@@ -122,7 +156,8 @@ class LastFM:
 
             raise LastFMError(response.status, data)
 
-        return (yield from response.json())
+        data = yield from response.text()
+        return self.parse_data(data)
 
     def get_tracks(self, user, limit=None):
         """Get the track(s) being listened to by a user.
@@ -141,14 +176,20 @@ class LastFM:
         if limit is not None:
             keys["limit"] = limit
 
-        data = yield from self.call_api("user.getRecentTracks", **keys)
+        (type_, data) = yield from self.call_api("user.getRecentTracks", **keys)
 
-        # TODO - XML parsing
-        data = data["recenttracks"]["track"]
-        if not isinstance(data, list):
-            data = [data]
-        
-        return [Track.from_json(t) for t in data]
+        if type_ == 'json':
+            assert 'recenttracks' in data and 'track' in data['recenttracks'],\
+                'Invalid response recieved'
+            data = data["recenttracks"]["track"]
+            if not isinstance(data, list):
+                data = [data]
+
+            return [Track.from_json(t) for t in data]
+        elif type_ == 'xml':
+            tracks = data.getElementsByTagName('track')
+
+            return [Track.from_xml(t) for t in tracks]
 
     def get_track_info(self, track, user=None):
         """Get the information on a track, returning user data optionally.
@@ -178,4 +219,3 @@ class LastFM:
 
         data = yield from self.call_api("track.getInfo", **keys)
         return data
-
