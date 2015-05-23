@@ -60,8 +60,7 @@ class Track:
             else:
                 kw["album"] = str(json["album"])
 
-        if "@attr" in json:
-            kw["playing"] = ("nowplaying" in json["@attr"])
+        kw["playing"] = ("@attr" in json and "nowplaying" in json["@attr"])
 
         if "mbid" in json and json["mbid"] != '':
             kw["mbid"] = json["mbid"]
