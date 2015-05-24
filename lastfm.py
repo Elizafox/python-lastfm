@@ -111,13 +111,18 @@ class LastFM:
     url = "http://ws.audioscrobbler.com/2.0/"
     """The last.fm API endpoint"""
 
-    def __init__(self, api_key):
+    def __init__(self, api_key, fmt="json"):
         """Initialise the last.fm class.
 
         :param api_key: The last.fm API key to use.
+
+        :param fmt: Format to use the Last.FM API in
         """
+        fmt = fmt.lower()
+        assert fmt in ("json", "xml"), "API format must be json or XML"
 
         self.api_key = api_key
+        self.fmt = fmt
 
     @lru_cache(maxsize=16)
     def parse_data(self, response):
@@ -127,11 +132,10 @@ class LastFM:
 
         :returns: A tuple containing the data format and the data.
         """
-        try:
-            return ("json", json.loads(response))
-        except ValueError:
-            warn("JSON failed, falling back to XML for parsing!")
-            return ("xml", minidom.parseString(response))
+        if self.fmt == "json":
+            return json.loads(response)
+        else:
+            return minidom.parseString(response)
 
     @lru_cache(maxsize=32)
     def build_qs(self, **keys):
@@ -141,17 +145,17 @@ class LastFM:
         return "{}?{}".format(self.url, urlencode(keys))
 
     @asyncio.coroutine
-    def call_api(self, method, fmt="json", **keys):
+    def call_api(self, method, **keys):
         """Call the last.fm API directly using the given parameters.
 
         :param method: The API method to call (i.e. "track.getInfo").
-        :param fmt: The format desired.  You must specify None for XML.
 
         :returns: Response as parsed by :py:func:`parse_data`.
         """
         keys["method"] = method
-        if fmt is not None:
-            keys["format"] = fmt
+        if self.fmt == "json":
+            keys["format"] = self.fmt
+
         response = yield from aiohttp.request("GET", self.build_qs(**keys))
 
         if response.status != 200:
@@ -183,18 +187,18 @@ class LastFM:
         if limit is not None:
             keys["limit"] = limit
 
-        (type_, data) = yield from self.call_api("user.getRecentTracks", **keys)
+        data = yield from self.call_api("user.getRecentTracks", **keys)
 
-        if type_ == 'json':
-            assert 'recenttracks' in data and 'track' in data['recenttracks'],\
-                'Invalid response recieved'
+        if self.fmt == "json":
+            assert "recenttracks" in data and "track" in data["recenttracks"],\
+                "Invalid response recieved"
             data = data["recenttracks"]["track"]
             if not isinstance(data, list):
                 data = [data]
 
             return [Track.from_json(t) for t in data]
-        elif type_ == 'xml':
-            tracks = data.getElementsByTagName('track')
+        elif self.fmt == "xml":
+            tracks = data.getElementsByTagName("track")
 
             return [Track.from_xml(t) for t in tracks]
 
