@@ -13,22 +13,47 @@ def xml_get_text(tag):
     for node in tag.childNodes:
         if node.nodeType == node.TEXT_NODE:
             parts.append(node.data)
-    return ''.join(parts)
+    return "".join(parts)
+
+
+class User:
+
+    def __init__(self, username, tracks, **kwargs):
+        self.username = username
+        self.tracks = tracks
+        self.listencount = kwargs.get("listencount", None)
+        self.birthday = kwargs.get("birthday", None)
+
+    def now_listening(self):
+        """Check if a user is listening to a track"""
+        if not self.tracks:
+            return False
+
+        return self.tracks[0].playing
+
+
+class Tag:
+
+    def __init__(self, tag, **kwargs):
+        self.tag = tag
+        self.url = kwargs.get("url", None)
+        self.reach = kwargs.get("reach", None)
+        self.taggings = kwargs.get("taggings", None)
+        self.toptracks = kwargs.get("toptracks", None)
+        self.topartists = kwargs.get("topartists", None)
 
 
 class Track:
-    __slots__ = ["artist", "title", "album",
-                 "genres", "duration", "loved", "mbid", "playing"]
-
     def __init__(self, artist, title, **kwargs):
         self.artist = artist
         self.title = title
         self.album = kwargs.get("album", None)
-        self.genres = kwargs.get("genres", None)
+        self.tags = kwargs.get("tags", None)
         self.duration = kwargs.get("duration", None)
         self.loved = kwargs.get("loved", None)
         self.mbid = kwargs.get("mbid", None)
         self.playing = kwargs.get("playing", None)
+        self.description = kwargs.get("description", None)
 
     def __str__(self):
         return "{title} by {artist}".format(title=self.title,
@@ -62,10 +87,10 @@ class Track:
 
         kw["playing"] = ("@attr" in json and "nowplaying" in json["@attr"])
 
-        if "mbid" in json and json["mbid"] != '':
+        if "mbid" in json and json["mbid"] != "":
             kw["mbid"] = json["mbid"]
 
-        if "loved" in json:  # indeterminate if it isn't present.
+        if "loved" in json:  # indeterminate if it isn"t present.
             kw["loved"] = (json["loved"] == "1")
 
         return cls(artist, title, **kw)
@@ -74,21 +99,21 @@ class Track:
     def from_xml(cls, xml):
         kw = {}
 
-        artist = xml_get_text(xml.getElementsByTagName('artist')[0])
-        title = xml_get_text(xml.getElementsByTagName('name')[0])
+        artist = xml_get_text(xml.getElementsByTagName("artist")[0])
+        title = xml_get_text(xml.getElementsByTagName("name")[0])
 
-        album = xml_get_text(xml.getElementsByTagName('album')[0])
+        album = xml_get_text(xml.getElementsByTagName("album")[0])
         if album != "":
             kw["album"] = album
 
-        mbid = xml_get_text(xml.getElementsByTagName('mbid')[0])
+        mbid = xml_get_text(xml.getElementsByTagName("mbid")[0])
         if mbid != "":
             kw["mbid"] = mbid
 
         kw["playing"] = xml.hasAttribute("nowplaying")
 
         loved_tag = xml.getElementsByTagName("loved")
-        if len(loved_tag) > 0:  # indeterminate if it isn't present.
+        if len(loved_tag) > 0:  # indeterminate if it isn"t present.
             kw["loved"] = (xml_get_text(loved_tag[0]) == "1")
 
         return cls(artist, title, **kw)
