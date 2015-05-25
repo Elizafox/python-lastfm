@@ -90,7 +90,7 @@ class Track:
         if "mbid" in json and json["mbid"] != "":
             kw["mbid"] = json["mbid"]
 
-        if "loved" in json:  # indeterminate if it isn"t present.
+        if "loved" in json:  # indeterminate if it isn't present.
             kw["loved"] = (json["loved"] == "1")
 
         return cls(artist, title, **kw)
@@ -113,7 +113,7 @@ class Track:
         kw["playing"] = xml.hasAttribute("nowplaying")
 
         loved_tag = xml.getElementsByTagName("loved")
-        if len(loved_tag) > 0:  # indeterminate if it isn"t present.
+        if len(loved_tag) > 0:  # indeterminate if it isn't present.
             kw["loved"] = (xml_get_text(loved_tag[0]) == "1")
 
         return cls(artist, title, **kw)
